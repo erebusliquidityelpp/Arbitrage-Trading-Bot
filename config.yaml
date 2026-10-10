@@ -1,0 +1,52 @@
+# Anything you leave out falls back to the defaults inside arb_bot.py.
+mode: paper            # paper | live  (live also needs --live --yes-real-money)
+loop_seconds: 15
+
+# "auto" = every perpetual that trades on ALL enabled exchanges (found at startup).
+# Or a manual list, e.g. [BTC, ETH, SOL].
+bases: auto
+exclude_coins: []     # coins to skip even if listed on both
+refine_top_n: 12      # order-book check for the 12 most promising coins per scan
+
+# Gaps above this are treated as data / contract-size errors and ignored.
+max_price_gap_bps: 100
+enabled_exchanges: [binance, hyperliquid]   # bybit / okx also supported if you add them
+
+# Set taker_bps to YOUR actual fee tier. Fees decide whether any edge exists.
+exchanges:
+  binance:     {symbol: "{b}/USDT:USDT", settle: USDT, taker_bps: 4.5, funding_hours: 8}
+  bybit:       {symbol: "{b}/USDT:USDT", settle: USDT, taker_bps: 5.5, funding_hours: 8}
+  okx:         {symbol: "{b}/USDT:USDT", settle: USDT, taker_bps: 5.0, funding_hours: 8}
+  hyperliquid: {symbol: "{b}/USDC:USDC", settle: USDC, taker_bps: 4.5, funding_hours: 1}
+
+price_arb:
+  enabled: true
+  min_net_edge_bps: 3.0
+  take_profit_bps: 2.0
+  stop_loss_bps: 15.0
+  max_hold_minutes: 30
+
+funding_arb:
+  enabled: true
+  min_apr_pct: 25.0
+  expected_hold_hours: 24
+  min_net_edge_bps: 5.0
+  exit_apr_pct: 3.0
+  max_hold_hours: 72
+  stop_loss_bps: 25.0
+
+sizing:
+  notional_usd: 200
+  leverage: 3
+  max_open_positions: 3
+  max_total_notional_usd: 1000
+  min_depth_multiple: 3
+
+risk:
+  daily_loss_limit_usd: 30
+  cooldown_minutes: 10
+
+# Railway volume is mounted at /data, so state and trade log survive redeploys.
+files:
+  state: /data/state.json
+  trades: /data/trades.csv
