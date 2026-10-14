@@ -1,0 +1,73 @@
+# Anything you leave out falls back to the defaults inside arb_bot.py.
+mode: paper            # paper | live  (live also needs --live --yes-real-money)
+loop_seconds: 15
+
+# Which coins to trade:
+#   liquid  = the top_liquid_n most-traded coins that exist on every exchange, ranked by 24h volume at startup (recommended)
+#   auto    = every perpetual listed on all exchanges (thin coins lose money, not recommended)
+#   [BTC, ETH, ...] = your own list
+bases: liquid
+top_liquid_n: 20
+min_volume_usd: 50000000     # 24h volume needed on EVERY exchange
+exclude_coins: []
+refine_top_n: 10             # order-book check for the 10 most stretched coins per scan
+
+# Gaps above this are treated as data / contract-size errors and ignored.
+max_price_gap_bps: 100
+enabled_exchanges: [binance, hyperliquid]
+
+# Set taker_bps to YOUR actual fee tier. Fees decide whether any edge exists.
+exchanges:
+  binance:     {symbol: "{b}/USDT:USDT", settle: USDT, taker_bps: 4.5, funding_hours: 8}
+  bybit:       {symbol: "{b}/USDT:USDT", settle: USDT, taker_bps: 5.5, funding_hours: 8}
+  okx:         {symbol: "{b}/USDT:USDT", settle: USDT, taker_bps: 5.0, funding_hours: 8}
+  hyperliquid: {symbol: "{b}/USDC:USDC", settle: USDC, taker_bps: 4.5, funding_hours: 1}
+
+# CONVERGENCE TRADE (the only strategy). The bot learns each coin's normal price gap between the two exchanges, trades only
+# when the gap is stretched far beyond normal, and closes when it snaps back.
+price_arb:
+  enabled: true
+  use_basis: true
+  z_min: 3.0                 # gap must be 3 standard deviations beyond normal
+  warmup_samples: 60         # scans needed to learn a coin's normal gap (~15 min after every fresh start)
+  min_sigma_bps: 0.7
+  min_net_edge_bps: 4.0      # profit after fees + buffer + entry/exit spreads
+  take_profit_bps: 3.0
+  stop_loss_bps: 12.0        # measured on movement AFTER entry
+  max_hold_minutes: 15
+  max_spread_bps: 3.0        # skip thin books
+  confirm_scans: 2
+
+# Every scan is saved here so any settings can be replayed on the same real data (see README: "Record and replay").
+record:
+  enabled: true
+  dir: /data/rec
+  keep_days: 7
+
+# Alert on Telegram if no scan completes for this long (exchange API down or the bot stuck).
+watchdog:
+  enabled: true
+  stale_seconds: 120
+
+# No new trades on Saturday and Sunday (open positions are still managed). Change timezone to your own if you prefer.
+schedule:
+  pause_weekends: true
+  timezone: UTC
+
+sizing:
+  notional_usd: 100          # per leg
+  leverage: 3
+  max_open_positions: 3
+  max_total_notional_usd: 300
+  min_depth_multiple: 3
+
+risk:
+  daily_loss_limit_usd: 10
+  cooldown_minutes: 30
+  ban_after_losses: 2        # 2 losing trades in a row on a coin -> banned
+  ban_hours: 24
+
+# Railway volume is mounted at /data, so state and trade log survive redeploys.
+files:
+  state: /data/state.json
+  trades: /data/trades.csv
