@@ -17,8 +17,11 @@ max_price_gap_bps: 100
 enabled_exchanges: [binance, hyperliquid]
 
 # Set taker_bps to YOUR actual fee tier. Fees decide whether any edge exists.
+# Base (lowest-tier) public perp taker fees, from the exchanges' fee schedules as I know them - verify yours:
+#   Binance USDT-M 5.0 bps (4.5 with BNB fee discount) | Hyperliquid 4.5 bps (maker 1.5) | Bybit 5.5 | OKX 5.0
+# Real institutional desks cut these with volume tiers or maker rebates; do NOT lower these numbers until your account really has that tier.
 exchanges:
-  binance:     {symbol: "{b}/USDT:USDT", settle: USDT, taker_bps: 4.5, funding_hours: 8}
+  binance:     {symbol: "{b}/USDT:USDT", settle: USDT, taker_bps: 5.0, funding_hours: 8}
   bybit:       {symbol: "{b}/USDT:USDT", settle: USDT, taker_bps: 5.5, funding_hours: 8}
   okx:         {symbol: "{b}/USDT:USDT", settle: USDT, taker_bps: 5.0, funding_hours: 8}
   hyperliquid: {symbol: "{b}/USDC:USDC", settle: USDC, taker_bps: 4.5, funding_hours: 1}

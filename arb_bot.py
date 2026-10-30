@@ -367,10 +367,7 @@ class Feed:
             if liquid:
                 ranked = self._rank_liquid(list(coins))
                 if ranked:
-                    keep = {c for c, _ in ranked}
-                    for k in [k for k in self.sym if k[1] not in keep]:
-                        self.sym.pop(k); self.mult.pop(k, None); self.cs.pop(k, None)
-                    cfg["bases"] = [c for c, _ in ranked]
+                    cfg["bases"] = [c for c, _ in ranked]   # symbol maps of ALL coins are kept: open positions must stay priceable
                     log.info("LIQUID coin list: %d coins (24h volume on the thinnest exchange): %s", len(ranked),
                              " ".join(f"{c}({v / 1e6:.0f}M)" for c, v in ranked))
                 else:
@@ -395,6 +392,18 @@ class Feed:
             dropped = [b for b in bases if sum(1 for (n, bb) in self.sym if bb == b) < 2]
             if dropped:
                 log.warning("coins listed on <2 exchanges, will be ignored: %s", ", ".join(dropped))
+
+    def ensure(self, b):
+        """Make sure coin b has symbol maps on every exchange (needed to price a position in a coin that left the trading list)."""
+        for name, ex in self.ex.items():
+            if (name, b) in self.sym:
+                continue
+            smap = self.cfg["exchanges"][name].get("symbol_map") or {}
+            sym = smap[b] if b in smap else self.cfg["exchanges"][name]["symbol"].format(b=b)
+            if sym and sym in ex.markets:
+                self.sym[(name, b)] = sym
+                self.cs[(name, b)] = ex.markets[sym].get("contractSize") or 1.0
+                self.mult[(name, b)] = norm_base(ex.markets[sym]["base"])[1]
 
     def _rank_liquid(self, coins):
         """Top coins by 24h USD volume on the thinnest exchange. Returns [] if volumes cannot be read."""
@@ -445,7 +454,9 @@ class Feed:
         return {b: per for b, per in rough.items() if len(per) >= 2}
 
     def snapshot(self, bases, notional, depth_mult, keep=()):
-        rough = self._rough(bases)
+        for b in keep:
+            self.ensure(b)
+        rough = self._rough(list(dict.fromkeys(list(bases) + list(keep))))   # open positions are always priced, even if the coin left the list
         self.last_rough = rough
         self.universe = len(rough)
         if self.basis is not None:   # rank by how stretched the gap is versus the coin's own normal gap
@@ -930,6 +941,7 @@ class Bot:
         self.positions = [Position(**p) for p in self.st["positions"]]
         self.killed = False
         self.seen = {}
+        self.nodata = {}
         self.basis = Basis(cfg["price_arb"].get("ewma_alpha", 0.005), self.st.get("basis"), cfg["max_price_gap_bps"])
         self.feed.basis = self.basis
         self.weekend = False
@@ -1022,9 +1034,11 @@ class Bot:
 
         snap = self.feed.snapshot(cfg["bases"], sz["notional_usd"], sz["min_depth_multiple"],
                                   keep=[p.base for p in self.positions])
-        if not snap:
+        if not snap and not getattr(self.feed, "last_rough", None):
             log.warning("no market data this cycle")
             return
+        # NOTE: snap can legitimately be empty (no coin is stretched, so no order books were fetched). The scan must still go on:
+        # the "normal gap" is learned from the mark prices of EVERY coin on EVERY scan.
         self.last_snap, self.last_tick = snap, now
         self.rec.write(now, getattr(self.feed, "last_rough", None), snap)
         if self.alerted_stale:
@@ -1045,7 +1059,17 @@ class Bot:
             ql, qs = per.get(pos.long_ex), per.get(pos.short_ex)
             if not ql or not qs:
                 log.warning("no data for open position %s this cycle", pos.id)
+                self.nodata[pos.id] = self.nodata.get(pos.id, 0) + 1
+                if self.nodata[pos.id] == 20:
+                    notify(f"WARNING: no price data for open position {pos.base} ({pos.long_ex}/{pos.short_ex}) for ~{int(20 * cfg['loop_seconds'] / 60)} min.")
+                limit = cfg["price_arb"]["max_hold_minutes"] * 60 * 2
+                if not self.broker.live and (now - pos.opened) > limit and self.nodata[pos.id] >= 20:
+                    # paper only: it can never get a price, so close it at its entry prices (costs the fees) instead of leaving it stuck forever
+                    fake = {pos.base: {pos.long_ex: {"bid": pos.entry_long, "ask": pos.entry_long, "funding_h": None},
+                                       pos.short_ex: {"bid": pos.entry_short, "ask": pos.entry_short, "funding_h": None}}}
+                    self.close_pos(pos, fake, "no_data")
                 continue
+            self.nodata.pop(pos.id, None)
             if ql.get("funding_h") is not None and qs.get("funding_h") is not None:
                 dt_h = (now - pos.last_ts) / 3600
                 pos.funding_pnl += pos.notional * (qs["funding_h"] - ql["funding_h"]) * dt_h
@@ -1065,6 +1089,11 @@ class Bot:
         marks = getattr(self.feed, "last_rough", None) or None
         cands = find_candidates(cfg, snap, self.basis, marks)
         self.basis.update(marks or snap)      # learn from this scan AFTER judging it
+        self.scans = getattr(self, "scans", 0) + 1
+        if self.scans % 40 == 1:
+            wu = cfg["price_arb"].get("warmup_samples", 60)
+            log.info("scan #%d: %d coins priced | normal gap learned for %d/%d coins | open positions %d",
+                     self.scans, len(marks or {}), sum(1 for c in cfg["bases"] if self.basis.ready(c, wu)), len(cfg["bases"]), len(self.positions))
         weekend = weekend_active(cfg, now)
         if weekend != self.weekend:
             self.weekend = weekend
