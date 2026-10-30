@@ -7,7 +7,7 @@ loop_seconds: 15
 #   auto    = every perpetual listed on all exchanges (thin coins lose money, not recommended)
 #   [BTC, ETH, ...] = your own list
 bases: liquid
-top_liquid_n: 20
+top_liquid_n: 8
 min_volume_usd: 50000000     # 24h volume needed on EVERY exchange
 exclude_coins: []
 refine_top_n: 10             # order-book check for the 10 most stretched coins per scan
@@ -31,15 +31,15 @@ exchanges:
 price_arb:
   enabled: true
   use_basis: true
-  z_min: 3.0                 # gap must be 3 standard deviations beyond normal
+  z_min: 3.5                 # gap must be 3.5 standard deviations beyond normal
   warmup_samples: 60         # scans needed to learn a coin's normal gap (~15 min after every fresh start)
   min_sigma_bps: 0.7
-  min_net_edge_bps: 4.0      # profit after fees + buffer + entry/exit spreads
+  min_net_edge_bps: 6.0      # profit after fees + buffer + entry/exit spreads
   take_profit_bps: 3.0
   stop_loss_bps: 12.0        # measured on movement AFTER entry
   max_hold_minutes: 15
   max_spread_bps: 3.0        # skip thin books
-  confirm_scans: 2
+  confirm_scans: 3
 
 # Every scan is saved here so any settings can be replayed on the same real data (see README: "Record and replay").
 record:
@@ -69,6 +69,8 @@ risk:
   cooldown_minutes: 30
   ban_after_losses: 2        # 2 losing trades in a row on a coin -> banned
   ban_hours: 24
+  pause_after_losses: 4      # any 4 losing trades in a row -> no new trades for pause_hours
+  pause_hours: 6
 
 # Railway volume is mounted at /data, so state and trade log survive redeploys.
 files:

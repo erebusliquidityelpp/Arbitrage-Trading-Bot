@@ -56,7 +56,7 @@ DEFAULTS = {
     # Or give a manual list, e.g. [BTC, ETH, SOL].
     #   "liquid" = the top_liquid_n most-traded coins that exist on every exchange (ranked by 24h volume at startup)
     "bases": "liquid",
-    "top_liquid_n": 20,
+    "top_liquid_n": 8,
     "min_volume_usd": 50_000_000,   # a coin needs at least this 24h volume on EVERY exchange
     "liquid_fallback": ["BTC", "ETH", "SOL", "XRP", "BNB", "DOGE", "ADA", "AVAX", "LINK", "SUI", "LTC", "BCH",
                         "DOT", "NEAR", "AAVE", "UNI", "TRX", "HYPE", "ARB", "OP"],   # used only if volume data cannot be read
@@ -128,7 +128,9 @@ DEFAULTS = {
     "paper_extra_slippage_bps": 1.0,
     "risk": {"daily_loss_limit_usd": 10, "cooldown_minutes": 30,
              "ban_after_losses": 2,     # a coin that loses this many trades in a row is banned ...
-             "ban_hours": 24},          # ... for this long (stops re-entering the same failing coin)
+             "ban_hours": 24,           # ... for this long (stops re-entering the same failing coin)
+             "pause_after_losses": 4,   # any N losing trades in a row (all coins) -> no new trades for pause_hours
+             "pause_hours": 6},
     "files": {"state": "state.json", "trades": "trades.csv"},
 }
 
@@ -1007,6 +1009,14 @@ class Bot:
         self.st["total_pnl"] += pnl
         self.st["cooldowns"][pos.base] = time.time()
         rk = self.cfg["risk"]
+        self.st["all_streak"] = (self.st.get("all_streak", 0) + 1) if pnl < 0 else 0
+        pa = int(rk.get("pause_after_losses", 0) or 0)
+        if pa > 0 and self.st["all_streak"] >= pa:
+            self.st["pause_until"] = time.time() + float(rk.get("pause_hours", 6)) * 3600
+            self.st["all_streak"] = 0
+            m = f"PAUSE: {pa} losing trades in a row. No new trades for {rk.get('pause_hours', 6)}h."
+            log.warning(m)
+            notify(m)
         streak = self.st.setdefault("loss_streak", {})
         streak[pos.base] = (streak.get(pos.base, 0) + 1) if pnl < 0 else 0
         if streak[pos.base] >= int(rk.get("ban_after_losses", 0) or 0) > 0:
@@ -1126,6 +1136,8 @@ class Bot:
                     continue
                 if now - self.st["cooldowns"].get(c.base, 0) < cfg["risk"]["cooldown_minutes"] * 60:
                     continue
+                if now < self.st.get("pause_until", 0):
+                    break
                 pos = self.broker.open(c, sz["notional_usd"], snap)
                 if pos:
                     try:
