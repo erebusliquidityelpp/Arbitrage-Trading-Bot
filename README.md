@@ -99,3 +99,12 @@ The live broker is **untested against real exchanges**. I could only test the lo
 - The normal gap is learned from live data, so after a restart a coin needs ~15 minutes before it can trade again (the learned values are saved and reused when the volume is intact).
 - Paper fills assume top-of-book depth and cannot capture queue position, partial fills or API outages.
 - No bot "does everything" risk-free. Keep paper mode for 1-2 weeks of positive results before considering live.
+
+
+## Web dashboard (installable app, no Railway needed for the page)
+
+`index.html` + `manifest.webmanifest` + `sw.js` + icons make an installable Chrome app that shows everything the bot is doing.
+- Turn on GitHub Pages: repo Settings > Pages > Deploy from a branch > `main` / root. (Free GitHub Pages only serves PUBLIC repos; a private repo needs a paid plan. The page holds no secrets: the bot address and key are typed in the browser and stay there.)
+- Open `https://<user>.github.io/<repo>/`, press "See demo data" to preview, or enter your bot's address and `ARB_API_KEY`.
+- Install: Chrome address bar install icon (PC) or menu > Install app (Android). Update the app by uploading a new `index.html`, then press the Update button.
+- The page only displays data. The bot itself must still run somewhere 24/7 (a VPS, or your PC) with `ARB_API_KEY` set and its port reachable over HTTPS. Set `ARB_API_CORS` to your Pages address to lock the API to that site.
