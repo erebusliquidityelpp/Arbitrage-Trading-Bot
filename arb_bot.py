@@ -154,8 +154,13 @@ def load_config(path):
     return cfg
 
 
+EVENTS = []   # last bot messages, shown in the web dashboard's activity feed (no secrets in these)
+
+
 def notify(msg):
     """Optional Telegram alert (env TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)."""
+    EVENTS.append({"t": time.time(), "msg": str(msg)[:300]})
+    del EVENTS[:-80]
     tok, chat = os.getenv("TELEGRAM_TOKEN"), os.getenv("TELEGRAM_CHAT_ID")
     if not tok or not chat:
         return
@@ -1487,6 +1492,49 @@ def build_overview(bot):
     }
 
 
+def build_live(bot):
+    """What the bot sees right now: every tracked coin's gap vs its normal, plus state, limits and recent activity."""
+    cfg, pa = bot.cfg, bot.cfg["price_arb"]
+    wu = pa.get("warmup_samples", 60)
+    rough = getattr(bot.feed, "last_rough", None) or {}
+    watch = []
+    for base in (cfg["bases"] if isinstance(cfg["bases"], list) else []):
+        per, best = rough.get(base, {}), None
+        names = sorted(per)
+        for i, x in enumerate(names):
+            for y in names[i + 1:]:
+                g = gap_bps(per[x], per[y])
+                if g is None:
+                    continue
+                mean, sig, n = bot.basis.stat(base, x, y)
+                z = (g - mean) / max(sig, pa.get("min_sigma_bps", 0.7))
+                row = {"coin": base, "pair": f"{x}/{y}", "gap_bps": round(g, 2), "normal_bps": round(mean, 2),
+                       "sigma_bps": round(sig, 2), "z": round(z, 2), "samples": n, "warmup": wu}
+                if best is None or abs(z) > abs(best["z"]):
+                    best = row
+        if best is None:
+            best = {"coin": base, "pair": "", "gap_bps": None, "normal_bps": None, "sigma_bps": None, "z": 0, "samples": 0, "warmup": wu}
+        banned = bot.st.get("bans", {}).get(base, 0) > time.time()
+        best["banned"] = banned
+        best["open"] = any(p.base == base for p in bot.positions)
+        watch.append(best)
+    watch.sort(key=lambda r: -abs(r["z"]))
+    now = time.time()
+    return {
+        "watch": watch,
+        "thresholds": {"z_min": pa["z_min"], "min_net_edge_bps": pa["min_net_edge_bps"], "take_profit_bps": pa["take_profit_bps"],
+                       "stop_loss_bps": pa["stop_loss_bps"], "max_hold_minutes": pa["max_hold_minutes"],
+                       "confirm_scans": pa.get("confirm_scans", 1), "warmup_samples": wu},
+        "risk": {"day_pnl": round(bot.st.get("day_pnl", 0.0), 4), "daily_loss_limit": cfg["risk"]["daily_loss_limit_usd"],
+                 "loss_streak_all": bot.st.get("all_streak", 0), "pause_after_losses": cfg["risk"].get("pause_after_losses", 0),
+                 "paused_until_s": max(0, int(bot.st.get("pause_until", 0) - now)),
+                 "banned_coins": sorted(c for c, t in bot.st.get("bans", {}).items() if t > now),
+                 "killed": bool(bot.killed), "weekend_pause": bool(bot.weekend), "manual_pause": bool(bot.paused)},
+        "learned": sum(1 for c in (cfg["bases"] if isinstance(cfg["bases"], list) else []) if bot.basis.ready(c, wu)),
+        "events": [{"t": _iso(e["t"]), "msg": e["msg"]} for e in EVENTS[-40:]][::-1],
+    }
+
+
 def build_trades(bot, q):
     rows = load_trades(bot.tf)
     strat, coin, res = q.get("strategy", [""])[0], q.get("coin", [""])[0].upper(), q.get("result", [""])[0]
@@ -1529,9 +1577,18 @@ def make_api_handler(bot, key):
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
             self.send_header("Cache-Control", "no-store")
+            self.send_header("Access-Control-Allow-Origin", os.getenv("ARB_API_CORS", "*"))
+            self.send_header("Access-Control-Allow-Headers", "X-API-Key")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def do_OPTIONS(self):   # browser pre-check for the web dashboard
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", os.getenv("ARB_API_CORS", "*"))
+            self.send_header("Access-Control-Allow-Headers", "X-API-Key")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
         def do_GET(self):
             u = urllib.parse.urlparse(self.path)
@@ -1543,6 +1600,8 @@ def make_api_handler(bot, key):
             try:
                 if u.path == "/api/arb/overview":
                     return self._send(200, {"ok": True, "data": build_overview(bot)})
+                if u.path == "/api/arb/live":
+                    return self._send(200, {"ok": True, "data": build_live(bot)})
                 if u.path == "/api/arb/trades":
                     return self._send(200, {"ok": True, "data": build_trades(bot, urllib.parse.parse_qs(u.query))})
                 return self._send(404, {"ok": False, "error": "not found"})

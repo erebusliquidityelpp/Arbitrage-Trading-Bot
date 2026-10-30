@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ELPP Arbitrage Bot Live</title>
+<style>
+:root{--ink:#0A0E14;--panel:#12171F;--panel2:#171D27;--line:#222B38;--txt:#E6EDF3;--mut:#8B98A9;--blue:#58A6FF;--green:#3FB950;--red:#F85149;--amber:#D29922;--violet:#A371F7}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ink);color:var(--txt);font:14px/1.45 "IBM Plex Sans",system-ui,Segoe UI,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:16px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between;margin-bottom:14px}
+h1{margin:0;font:600 20px Georgia,"Fraunces",serif;letter-spacing:.2px}
+h1 small{color:var(--mut);font:12px "IBM Plex Sans",sans-serif;margin-left:8px}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:99px;font-weight:600;font-size:12px;border:1px solid var(--line);background:var(--panel)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--mut)}
+.run .dot{background:var(--green);box-shadow:0 0 8px var(--green)}.run{color:var(--green)}
+.pause .dot{background:var(--amber)}.pause{color:var(--amber)}
+.kill .dot,.off .dot{background:var(--red)}.kill,.off{color:var(--red)}
+.mode{color:var(--blue)}
+.grid{display:grid;gap:12px}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+.k .l{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.8px}
+.k .v{font:600 24px/1.2 Georgia,serif;margin-top:4px}
+.k .s{color:var(--mut);font-size:12px}
+.pos{color:var(--green)}.neg{color:var(--red)}.mut{color:var(--mut)}.amb{color:var(--amber)}.blu{color:var(--blue)}
+.two{grid-template-columns:2fr 1fr}
+@media(max-width:860px){.two{grid-template-columns:1fr}}
+h2{margin:0 0 10px;font:600 13px "IBM Plex Sans",sans-serif;text-transform:uppercase;letter-spacing:.9px;color:var(--mut)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{color:var(--mut);font-weight:500;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.6px;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:7px 8px;border-bottom:1px solid #1b2330;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.sc{overflow-x:auto}
+.tag{display:inline-block;padding:1px 8px;border-radius:6px;font-size:11px;font-weight:600}
+.t-g{background:#12301b;color:var(--green)}.t-r{background:#3a1517;color:var(--red)}.t-a{background:#3a2e10;color:var(--amber)}.t-b{background:#112a47;color:var(--blue)}.t-m{background:#202833;color:var(--mut)}
+.bar{position:relative;height:10px;background:#0d1219;border-radius:6px;min-width:130px;overflow:hidden}
+.bar i{position:absolute;top:0;bottom:0;border-radius:6px}
+.bar b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--amber)}
+.bar u{position:absolute;top:0;bottom:0;left:50%;width:1px;background:#3a4556}
+.feed{max-height:330px;overflow:auto;font-size:12.5px}
+.feed div{padding:6px 0;border-bottom:1px solid #1b2330}
+.feed time{color:var(--mut);font-size:11px;display:block}
+.open{color:var(--green)}.close-l{color:var(--red)}
+svg text{fill:var(--mut);font-size:10px}
+.err{background:#3a1517;border:1px solid #6b2226;color:#ffb4b0;border-radius:10px;padding:10px 12px;margin-bottom:12px;display:none}
+.conn{display:none;max-width:520px;margin:40px auto}
+.conn input{width:100%;background:#0d1219;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:10px;margin:4px 0 12px;font-size:14px}
+button{background:var(--blue);color:#06101c;border:0;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer;margin-right:8px}
+button.sec{background:var(--panel2);color:var(--txt);border:1px solid var(--line)}
+.legend{color:var(--mut);font-size:12px;margin-top:8px}
+.legend span{margin-right:12px}
+.foot{color:var(--mut);font-size:12px;text-align:center;margin:18px 0 6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div id="conn" class="card conn">
+  <h1>Connect to your bot</h1>
+  <p class="mut">Enter the public address of your Arbitrage Bot service on Railway and the ARB_API_KEY you set. They are saved only in this browser.</p>
+  <label class="mut">Bot address</label>
+  <input id="cu" placeholder="https://your-arbitrage-bot.up.railway.app" autocomplete="off">
+  <label class="mut">API key (ARB_API_KEY)</label>
+  <input id="ck" type="password" placeholder="your key" autocomplete="off">
+  <button onclick="saveConn()">Connect</button><button class="sec" onclick="startDemo()">See demo data</button>
+</div>
+
+<div id="main" style="display:none">
+<header>
+  <h1>ELPP Arbitrage Bot <small id="sub"></small></h1>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <span class="pill mode" id="mode">PAPER</span>
+    <span class="pill" id="state"><span class="dot"></span><span id="stateTxt">connecting</span></span>
+    <button class="sec" onclick="showConn()" style="margin:0;padding:6px 12px">Settings</button>
+  </div>
+</header>
+<div class="err" id="err"></div>
+
+<div class="grid kpis">
+  <div class="card k"><div class="l">All-time P&amp;L</div><div class="v" id="kTot">-</div><div class="s" id="kTrades">-</div></div>
+  <div class="card k"><div class="l">Today (UTC)</div><div class="v" id="kDay">-</div><div class="s" id="kDayLim">-</div></div>
+  <div class="card k"><div class="l">Open now (unrealised)</div><div class="v" id="kUn">-</div><div class="s" id="kOpen">-</div></div>
+  <div class="card k"><div class="l">Win rate</div><div class="v" id="kWin">-</div><div class="s" id="kWL">-</div></div>
+  <div class="card k"><div class="l">Profit factor</div><div class="v" id="kPf">-</div><div class="s" id="kAvg">-</div></div>
+  <div class="card k"><div class="l">Last scan</div><div class="v" id="kScan">-</div><div class="s" id="kUp">-</div></div>
+</div>
+
+<div class="grid two" style="margin-bottom:12px">
+  <div class="card"><h2>Profit curve</h2><div id="curve"></div></div>
+  <div class="card"><h2>Safety and limits</h2><div id="risk"></div></div>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+  <h2>Open positions</h2>
+  <div class="sc"><table><thead><tr><th>Coin</th><th>Long</th><th>Short</th><th>Size</th><th>Age</th><th>If closed now</th></tr></thead><tbody id="pos"></tbody></table></div>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+  <h2>What the bot is watching <span class="mut" style="text-transform:none;letter-spacing:0">(how far each coin's price gap is from normal)</span></h2>
+  <div class="sc"><table><thead><tr><th>Coin</th><th>Gap now</th><th>Normal</th><th>Stretch (z)</th><th style="min-width:160px">Distance to entry</th><th>Learning</th><th>Status</th></tr></thead><tbody id="watch"></tbody></table></div>
+  <div class="legend"><span class="pos">green = gap above normal</span><span class="neg">red = gap below normal</span><span class="amb">| amber line = entry level</span></div>
+</div>
+
+<div class="grid two" style="margin-bottom:12px">
+  <div class="card"><h2>Recent trades</h2><div class="sc"><table><thead><tr><th>Closed</th><th>Coin</th><th>P&amp;L</th><th>Held</th><th>Reason</th></tr></thead><tbody id="trades"></tbody></table></div></div>
+  <div class="card"><h2>Activity feed</h2><div class="feed" id="feed"></div></div>
+</div>
+
+<div class="card">
+  <h2>Results by coin</h2>
+  <div class="sc"><table><thead><tr><th>Coin</th><th>Trades</th><th>Wins</th><th>P&amp;L</th></tr></thead><tbody id="coins"></tbody></table></div>
+</div>
+<div class="foot">Updates every 5 seconds. Read-only: this page cannot place or change any trade.</div>
+</div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let CFG={url:"",key:"",demo:false},timer=null;
+try{const s=JSON.parse(localStorage.getItem("arbdash")||"{}");CFG.url=s.url||"";CFG.key=s.key||""}catch(e){}
+const money=(v,d=2)=>v==null?"-":(v>0?"+":"")+v.toFixed(d)+" USD";
+const cls=v=>v>0?"pos":v<0?"neg":"mut";
+const dur=s=>{if(s==null)return"-";s=Math.round(s);if(s<60)return s+"s";if(s<3600)return Math.floor(s/60)+"m "+(s%60)+"s";const h=Math.floor(s/3600);return h<48?h+"h "+Math.floor(s%3600/60)+"m":Math.floor(h/24)+"d "+(h%24)+"h"};
+const hm=t=>{try{return new Date(t).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}catch(e){return t}};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function showConn(){clearInterval(timer);$("main").style.display="none";$("conn").style.display="block";$("cu").value=CFG.url;$("ck").value=CFG.key}
+function saveConn(){CFG.url=$("cu").value.trim().replace(/\/+$/,"");CFG.key=$("ck").value.trim();CFG.demo=false;
+  try{localStorage.setItem("arbdash",JSON.stringify({url:CFG.url,key:CFG.key}))}catch(e){}start()}
+function startDemo(){CFG.demo=true;start()}
+
+async function get(path){
+  if(CFG.demo)return demoData(path);
+  const r=await fetch(CFG.url+path,{headers:{"X-API-Key":CFG.key},cache:"no-store"});
+  if(r.status===401)throw new Error("Wrong API key.");
+  const j=await r.json();if(!j.ok)throw new Error(j.error||"error");return j.data;
+}
+function start(){
+  $("conn").style.display="none";$("main").style.display="block";$("sub").textContent=CFG.demo?"DEMO DATA (not real)":"";
+  clearInterval(timer);refresh();timer=setInterval(refresh,5000);
+}
+async function refresh(){
+  try{
+    const [o,l,t]=await Promise.all([get("/api/arb/overview"),get("/api/arb/live"),get("/api/arb/trades?limit=12")]);
+    $("err").style.display="none";render(o,l,t);
+  }catch(e){
+    $("err").style.display="block";
+    $("err").textContent="Cannot reach the bot: "+e.message+(CFG.demo?"":" (check the address, that the service has a public domain, and the key)");
+    $("stateTxt").textContent="no connection";$("state").className="pill off";
+  }
+}
+
+function render(o,l,t){
+  const st=o.state,paused=l.risk.manual_pause,wk=l.risk.weekend_pause,k=l.risk.killed,pz=l.risk.paused_until_s>0;
+  let txt="Running",c="run";
+  if(k){txt="Kill switch (daily loss limit)";c="kill"}else if(wk){txt="Weekend pause";c="pause"}else if(paused){txt="Paused by you";c="pause"}else if(pz){txt="Loss pause: "+dur(l.risk.paused_until_s)+" left";c="pause"}
+  else if(l.learned<(l.watch.length||1)){txt="Running, learning gaps "+l.learned+"/"+l.watch.length}
+  $("state").className="pill "+c;$("stateTxt").textContent=txt;
+  $("mode").textContent=o.mode;$("mode").style.color=o.mode==="LIVE"?"var(--red)":"var(--blue)";
+
+  const s=o.stats,day=l.risk.day_pnl;
+  $("kTot").textContent=money(o.pnl.total);$("kTot").className="v "+cls(o.pnl.total);$("kTrades").textContent=s.trades+" closed trades";
+  $("kDay").textContent=money(day);$("kDay").className="v "+cls(day);$("kDayLim").textContent="stops at -"+l.risk.daily_loss_limit+" USD";
+  $("kUn").textContent=money(o.pnl.unrealised);$("kUn").className="v "+cls(o.pnl.unrealised);$("kOpen").textContent=o.positions.length+" / "+o.settings.max_open_positions+" positions";
+  $("kWin").textContent=s.win_rate==null?"-":s.win_rate+"%";$("kWin").className="v "+(s.win_rate==null?"":s.win_rate>=50?"pos":s.win_rate>=35?"amb":"neg");$("kWL").textContent=s.wins+" wins / "+s.losses+" losses";
+  $("kPf").textContent=s.profit_factor==null?"-":s.profit_factor;$("kPf").className="v "+(s.profit_factor==null?"":s.profit_factor>=1.2?"pos":s.profit_factor>=1?"amb":"neg");$("kAvg").textContent="avg "+(s.avg==null?"-":money(s.avg,3))+" per trade";
+  $("kScan").textContent=o.last_scan_s_ago==null?"-":dur(o.last_scan_s_ago)+" ago";$("kScan").className="v "+(o.last_scan_s_ago!=null&&o.last_scan_s_ago>120?"neg":"pos");$("kUp").textContent="up "+dur(o.uptime_s)+" | "+o.exchanges.join(" + ");
+
+  curve(o.closed);
+  const th=l.thresholds,rk=l.risk;
+  const row=(a,b)=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #1b2330"><span class="mut">${a}</span><span>${b}</span></div>`;
+  $("risk").innerHTML=
+    row("Enters when gap is",`<b>${th.z_min}</b> std-devs from normal`)+
+    row("and net edge at least",`<b>${th.min_net_edge_bps}</b> bps`)+
+    row("Take profit / stop loss",`<span class="pos">${th.take_profit_bps}</span> / <span class="neg">${th.stop_loss_bps}</span> bps`)+
+    row("Max hold",th.max_hold_minutes+" min")+
+    row("Size per trade",o.settings.notional_usd+" USD, "+o.settings.leverage+"x")+
+    row("Losses in a row",`<span class="${rk.loss_streak_all>=rk.pause_after_losses-1&&rk.pause_after_losses?'neg':''}">${rk.loss_streak_all}</span> / ${rk.pause_after_losses} (then pause)`)+
+    row("Banned coins",rk.banned_coins.length?rk.banned_coins.map(x=>`<span class="tag t-r">${esc(x)}</span>`).join(" "):"none");
+
+  $("pos").innerHTML=o.positions.length?o.positions.map(p=>`<tr><td><b>${esc(p.coin)}</b></td><td><span class="tag t-g">LONG</span> ${esc(p.long_ex)}</td><td><span class="tag t-r">SHORT</span> ${esc(p.short_ex)}</td><td>${p.notional} USD</td><td>${dur(p.age_s)}</td><td class="${cls(p.pnl_if_closed_now)}"><b>${p.pnl_if_closed_now==null?"n/a":money(p.pnl_if_closed_now,3)}</b></td></tr>`).join(""):`<tr><td colspan="6" class="mut">No open positions. The bot is waiting for a stretched gap.</td></tr>`;
+
+  $("watch").innerHTML=l.watch.map(w=>{
+    const z=w.z||0,az=Math.min(Math.abs(z),th.z_min*1.4),half=az/(th.z_min*1.4)*50,warm=w.samples>=w.warmup;
+    const col=z>=0?"var(--green)":"var(--red)",hit=Math.abs(z)>=th.z_min&&warm;
+    const left=z>=0?50:50-half;
+    let tag=`<span class="tag t-m">watching</span>`;
+    if(w.open)tag=`<span class="tag t-b">IN TRADE</span>`;else if(w.banned)tag=`<span class="tag t-r">banned</span>`;else if(!warm)tag=`<span class="tag t-a">learning</span>`;else if(hit)tag=`<span class="tag t-g">ENTRY ZONE</span>`;else if(Math.abs(z)>=th.z_min*.7)tag=`<span class="tag t-a">close</span>`;
+    return `<tr><td><b>${esc(w.coin)}</b></td><td>${w.gap_bps==null?"-":w.gap_bps.toFixed(1)+" bps"}</td><td class="mut">${w.normal_bps==null?"-":w.normal_bps.toFixed(1)+" bps"}</td><td class="${hit?(z>=0?'pos':'neg'):''}"><b>${z.toFixed(2)}</b></td>
+    <td><div class="bar"><u></u><i style="left:${left}%;width:${half}%;background:${col};opacity:${warm?1:.35}"></i><b style="left:${50+50/1.4}%"></b><b style="left:${50-50/1.4}%"></b></div></td>
+    <td class="mut">${Math.min(w.samples,w.warmup)}/${w.warmup}</td><td>${tag}</td></tr>`}).join("");
+
+  $("trades").innerHTML=t.rows.length?t.rows.map(r=>`<tr><td class="mut">${hm(r.closed)}</td><td><b>${esc(r.coin)}</b></td><td class="${cls(r.pnl)}"><b>${money(r.pnl,3)}</b></td><td class="mut">${dur(r.held_s)}</td><td><span class="tag ${r.pnl>0?'t-g':'t-m'}">${esc(r.reason)}</span></td></tr>`).join(""):`<tr><td colspan="5" class="mut">No trades yet.</td></tr>`;
+  $("feed").innerHTML=l.events.length?l.events.map(e=>{const m=e.msg,cl=/OPEN/.test(m)?"open":/CLOSE/.test(m)&&/pnl=-/.test(m)?"close-l":/CLOSE/.test(m)?"pos":/PAUSE|KILL|WARNING/.test(m)?"amb":"";return `<div class="${cl}"><time>${hm(e.t)}</time>${esc(m)}</div>`}).join(""):`<div class="mut">Nothing yet since the bot started.</div>`;
+  $("coins").innerHTML=o.coins.length?o.coins.map(c=>`<tr><td><b>${esc(c.coin)}</b></td><td>${c.trades}</td><td>${c.wins}</td><td class="${cls(c.pnl)}"><b>${money(c.pnl,3)}</b></td></tr>`).join(""):`<tr><td colspan="4" class="mut">No closed trades yet.</td></tr>`;
+}
+
+function curve(closed){
+  const el=$("curve");
+  if(!closed.length){el.innerHTML='<div class="mut" style="padding:40px 0;text-align:center">The curve appears after the first closed trade.</div>';return}
+  let cum=0;const pts=[0].concat(closed.map(c=>cum+=c.pnl));
+  const W=640,H=200,P=28,mn=Math.min(...pts,0),mx=Math.max(...pts,0),rg=(mx-mn)||1;
+  const x=i=>P+i/(pts.length-1||1)*(W-P-8),y=v=>H-P-(v-mn)/rg*(H-P-10);
+  const d=pts.map((v,i)=>(i?"L":"M")+x(i).toFixed(1)+" "+y(v).toFixed(1)).join(" ");
+  const last=pts[pts.length-1],col=last>=0?"#3FB950":"#F85149";
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Cumulative profit curve">
+  <line x1="${P}" x2="${W-8}" y1="${y(0)}" y2="${y(0)}" stroke="#3a4556" stroke-dasharray="3 4"/>
+  <path d="${d} L${x(pts.length-1)} ${y(0)} L${x(0)} ${y(0)} Z" fill="${col}" opacity=".12"/>
+  <path d="${d}" fill="none" stroke="${col}" stroke-width="2.2"/>
+  <text x="2" y="${y(mx)+3}">${mx.toFixed(1)}</text><text x="2" y="${y(mn)+3}">${mn.toFixed(1)}</text>
+  <text x="${W-8}" y="${H-8}" text-anchor="end">${pts.length-1} trades, now ${last.toFixed(2)} USD</text></svg>`;
+}
+
+/* ---------- demo data (clearly labelled, not real) ---------- */
+let demoT=0;
+function demoData(path){
+  demoT++;const rnd=(a,b)=>a+Math.random()*(b-a);
+  if(path.startsWith("/api/arb/trades")){
+    const rs=["take_profit","stop_loss","timeout","take_profit","take_profit"];
+    return {total:12,rows:Array.from({length:8},(_,i)=>{const p=+(rnd(-.35,.45)).toFixed(3);return{closed:new Date(Date.now()-i*5400e3).toISOString(),coin:["BTC","ETH","SOL","XRP","DOGE"][i%5],pnl:p,held_s:Math.round(rnd(120,800)),reason:rs[i%5]}})};
+  }
+  if(path.startsWith("/api/arb/live")){
+    const coins=["BTC","ETH","SOL","XRP","DOGE","BNB","HYPE","SUI"];
+    return {watch:coins.map((c,i)=>({coin:c,pair:"binance/hyperliquid",gap_bps:+rnd(-14,14).toFixed(1),normal_bps:+rnd(-1,1).toFixed(1),sigma_bps:3,z:+(i==2?3.8:i==4?-2.7:rnd(-1.8,1.8)).toFixed(2),samples:i==7?22:90,warmup:60,banned:i==6,open:i==2})).sort((a,b)=>Math.abs(b.z)-Math.abs(a.z)),
+    thresholds:{z_min:3.5,min_net_edge_bps:6,take_profit_bps:3,stop_loss_bps:12,max_hold_minutes:15,confirm_scans:3,warmup_samples:60},
+    risk:{day_pnl:-0.42,daily_loss_limit:10,loss_streak_all:2,pause_after_losses:4,paused_until_s:0,banned_coins:["HYPE"],killed:false,weekend_pause:false,manual_pause:false},learned:7,
+    events:[{t:new Date().toISOString(),msg:"[PAPER] OPEN price SOL L:binance S:hyperliquid $100/leg net edge 7.2 bps"},{t:new Date(Date.now()-600e3).toISOString(),msg:"[PAPER] CLOSE price ETH L:hyperliquid S:binance pnl=+0.210 USD (take_profit) day=-0.42"},{t:new Date(Date.now()-2400e3).toISOString(),msg:"[PAPER] CLOSE price HYPE L:binance S:hyperliquid pnl=-0.380 USD (stop_loss) day=-0.63"}]};
+  }
+  let cum=0;const closed=Array.from({length:40},(_,i)=>({t:new Date(Date.now()-(40-i)*3600e3).toISOString(),pnl:+(rnd(-.4,.38)).toFixed(3)}));
+  const tot=closed.reduce((a,b)=>a+b.pnl,0);
+  return {mode:"PAPER",state:"running",uptime_s:86400+demoT*5,last_scan_s_ago:3,exchanges:["binance","hyperliquid"],coins_tracked:8,pnl:{total:tot,unrealised:+0.12},
+   stats:{trades:40,wins:19,losses:21,win_rate:47.5,avg:tot/40,best:.38,worst:-.4,profit_factor:.93,avg_hold_s:420},
+   positions:[{coin:"SOL",strategy:"price",long_ex:"binance",short_ex:"hyperliquid",notional:100,opened:"",age_s:210,funding_pnl:0,pnl_if_closed_now:+0.12}],
+   coins:[{coin:"ETH",trades:9,wins:6,pnl:.8},{coin:"BTC",trades:11,wins:5,pnl:-.1},{coin:"SOL",trades:8,wins:3,pnl:-.5},{coin:"XRP",trades:12,wins:5,pnl:-.7}],
+   closed,settings:{notional_usd:100,leverage:3,max_open_positions:3}};
+}
+
+if(CFG.url&&CFG.key){start()}else{$("conn").style.display="block"}
+</script>
+</body>
+</html>
